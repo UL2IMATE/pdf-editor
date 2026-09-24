@@ -1,7 +1,38 @@
 @import "tailwindcss";
-body
-{
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+
+:root {
+  --notion-bg: #F7F6F3;
+  --notion-surface: #FFFFFF;
+  --notion-border: rgba(55, 53, 47, 0.12);
+  --notion-text: #37352F;
+  --notion-text-muted: #787774;
+  --notion-hover: rgba(55, 53, 47, 0.06);
+  --notion-blue: #2383E2;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #37352F;
+  background-color: #F7F6F3;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Notion-style subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(55, 53, 47, 0.16);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(55, 53, 47, 0.3);
 }
