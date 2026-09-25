@@ -4,6 +4,16 @@ A minimalist, Notion-inspired PDF editor built with **React**, **TypeScript**, *
 
 ---
 
+## 📸 Screenshots
+
+### 1. Document Landing & File Ingestion
+![PDF Editor Landing Page](screenshots/landing-page.png)
+
+### 2. Workspace & In-Place Text Editing
+![PDF Editor Document Workspace](screenshots/editor-workspace.png)
+
+---
+
 ## ✨ Features
 
 - **🎨 Notion-Inspired Minimalism**:

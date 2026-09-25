@@ -1424,7 +1424,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     <div
       className="flex flex-col items-center justify-center p-4 relative"
       onClick={(e) => {
-        // Do not dismiss active edit if user clicked inside Settings, AI modal, or any floating toolbar
+        // Do not dismiss active edit if user clicked inside Settings, dialogs, or any floating toolbar
         const target = e.target as HTMLElement | null;
         if (
           target?.closest("[data-settings-panel]") ||
