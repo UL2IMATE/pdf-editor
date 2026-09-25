@@ -35,27 +35,6 @@ export interface BackendTextEdit {
   fontSize?: number;
 }
 
-export interface RewriteResponse {
-  success: boolean;
-  replacement_text: string;
-  character_count: number;
-  overflow_risk: boolean;
-}
-
-/**
- * Calculates typographical character budget:
- * Max Characters = floor(W / (0.52 * F)) * Lines
- */
-export function calculateCharacterBudget(
-  width: number,
-  fontSize: number,
-  lines: number = 1
-): number {
-  if (width <= 0 || fontSize <= 0 || lines <= 0) return 80;
-  const avgCharWidth = 0.52 * fontSize;
-  return Math.max(10, Math.floor(width / avgCharWidth) * lines);
-}
-
 /**
  * Ingests an uploaded PDF and extracts positional text blocks with coordinates.
  */
@@ -65,7 +44,6 @@ export async function extractBlocks(file: File): Promise<PageTextBlocks[]> {
   formData.append('pdf', file);
 
   const res = await api.post<{ success: boolean; pages: PageTextBlocks[] }>(
-
     '/pdf/extract-blocks',
     formData,
     {
@@ -74,23 +52,6 @@ export async function extractBlocks(file: File): Promise<PageTextBlocks[]> {
   );
 
   return res.data.pages;
-}
-
-/**
- * Sends a selected text snippet with prompt instruction and character limit to OpenAI.
- */
-export async function aiRewriteText(params: {
-  selectedText: string;
-  instruction: string;
-  maxCharacters: number;
-}): Promise<RewriteResponse> {
-  const res = await api.post<RewriteResponse>('/ai/rewrite', {
-    selected_text: params.selectedText,
-    instruction: params.instruction,
-    max_characters: params.maxCharacters,
-  });
-
-  return res.data;
 }
 
 /**

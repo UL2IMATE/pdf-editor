@@ -14,7 +14,6 @@ import {
   Square,
   Circle,
   Type,
-  Sparkles,
   FileText,
   Check,
   Move,
@@ -40,10 +39,8 @@ import {
 } from "../utils/pdfExport";
 import {
   extractBlocks,
-  calculateCharacterBudget,
   type TextBlock,
 } from "../services/api";
-import { AiRewriteModal } from "./AiRewriteModal";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -416,9 +413,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const [activeEditId, setActiveEditId] = useState<string | null>(null);
   const activeInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Fabric selected object (for shapes)
-  const [activeTextObj, setActiveTextObj] = useState<any | null>(null);
-  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+
 
   // Painter / Freehand Drawing state & Eraser
   const [isDrawingMode, setIsDrawingMode] = useState(false);
@@ -642,24 +637,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       });
       initCanvas.setZoom(scale);
 
-      const checkSelection = () => {
-        const active = initCanvas.getActiveObject();
-        if (
-          active &&
-          (active.type === "textbox" ||
-            active.type === "text" ||
-            active.type === "i-text")
-        ) {
-          setActiveTextObj(active);
-        } else {
-          setActiveTextObj(null);
-        }
-      };
-
-      initCanvas.on("selection:created", checkSelection);
-      initCanvas.on("selection:updated", checkSelection);
-      initCanvas.on("selection:cleared", () => setActiveTextObj(null));
-
       const persistPageAnnotations = () => {
         if (fabricInstanceRef.current) {
           pageAnnotationsRef.current[pageNumberRef.current] =
@@ -778,7 +755,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         });
         canvas.discardActiveObject();
         canvas.renderAll();
-        setActiveTextObj(null);
       } else if (activeEditId) {
         e.preventDefault();
         handleDeleteEdit(activeEditId);
@@ -813,7 +789,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     setIsExtracting(true);
 
     if (pdfFile) {
-      extractBlocks(pdfFile).catch((err) => {
+      extractBlocks(pdfFile).catch((err: unknown) => {
         console.warn("Backend extract-blocks unavailable:", err);
       });
     }
@@ -1413,16 +1389,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     setActiveEditId(null);
   };
 
-  // AI Rewrite Application
-  const handleApplyAiRewrite = (newText: string) => {
-    if (activeEditId) {
-      handleTextChange(activeEditId, newText);
-    } else if (activeTextObj && fabricInstanceRef.current) {
-      activeTextObj.set({ text: newText });
-      fabricInstanceRef.current.renderAll();
-    }
-  };
-
   const activeEdit = (pageEdits[pageNumber] || []).find(
     (e) => e.id === activeEditId
   );
@@ -1557,31 +1523,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
             {isExtracting && (
               <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[#2383E2] animate-ping" />
             )}
-          </button>
-
-          {/* AI Rewrite Action */}
-          <button
-            onClick={() => {
-              if (activeEdit || activeTextObj) {
-                setIsAiModalOpen(true);
-              } else {
-                alert(
-                  "Please click on any text in the document first to rewrite it with AI."
-                );
-              }
-            }}
-            className={`p-2 rounded-lg transition cursor-pointer relative ${
-              activeEdit || activeTextObj
-                ? "bg-[#2383E2]/10 text-[#2383E2]"
-                : "hover:bg-[#37352F]/5 text-[#787774] hover:text-[#37352F]"
-            }`}
-            title={
-              activeEdit || activeTextObj
-                ? "Rewrite selected text with AI"
-                : "Click any text block to use AI Rewrite"
-            }
-          >
-            <Sparkles size={18} />
           </button>
         </div>
       )}
@@ -1958,17 +1899,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
                       >
                         <Italic size={12} />
                       </button>
-
-                      <span className="text-[#37352F]/15">|</span>
-
-                      <button
-                        type="button"
-                        onClick={() => setIsAiModalOpen(true)}
-                        className="flex items-center gap-1 text-[#2383E2] hover:bg-[#2383E2]/10 px-1.5 py-0.5 rounded font-medium cursor-pointer"
-                      >
-                        <Sparkles size={12} />
-                        <span>Rewrite</span>
-                      </button>
                       {!edit.isCustom && (
                         <>
                           <span className="text-[#37352F]/15">|</span>
@@ -2146,31 +2076,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           })}
         </div>
       </div>
-
-      {/* AI Rewrite Modal */}
-      <AiRewriteModal
-        isOpen={isAiModalOpen}
-        onClose={() => setIsAiModalOpen(false)}
-        originalText={
-          activeEdit ? activeEdit.text : activeTextObj?.text || ""
-        }
-        maxCharacters={
-          activeEdit
-            ? calculateCharacterBudget(
-                activeEdit.width,
-                activeEdit.fontSize,
-                1
-              )
-            : activeTextObj
-            ? calculateCharacterBudget(
-                (activeTextObj.width || 120) * (activeTextObj.scaleX || 1),
-                (activeTextObj.fontSize || 16) * (activeTextObj.scaleY || 1),
-                1
-              )
-            : 100
-        }
-        onApply={handleApplyAiRewrite}
-      />
     </div>
   );
 });

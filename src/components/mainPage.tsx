@@ -1,4 +1,4 @@
-import { Upload, FileUp, Sparkles } from "lucide-react";
+import { Upload, FileUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PdfLogo } from "./PdfLogo";
 
@@ -97,10 +97,7 @@ export const MainPage = ({ handleUrl, handleFile }: MainPageProps) => {
           <span className="text-[#37352F]/20">•</span>
           <span>Vector Fidelity</span>
           <span className="text-[#37352F]/20">•</span>
-          <span className="flex items-center gap-1">
-            <Sparkles size={11} className="text-[#2383E2]" />
-            AI Rewrite
-          </span>
+          <span>In-Place Text Editing</span>
         </div>
       </div>
     </div>
