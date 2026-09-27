@@ -123,7 +123,13 @@ npm run install:all
 
 ### 3. Running in Development
 
-You can start both frontend and backend concurrently or run them in separate terminals:
+Run both the frontend and backend concurrently with a single command:
+
+```bash
+npm run dev
+```
+
+Or run them individually in separate terminals:
 
 ```bash
 # Terminal 1 - Start the Frontend (http://localhost:5173)
