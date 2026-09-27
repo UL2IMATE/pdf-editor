@@ -32,9 +32,9 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Temporary files
-*.tmp
-*.temp
+# Python cache
+__pycache__/
+*.pyc
 
 # PDF editor test files
 backend/test-files/*
