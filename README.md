@@ -1,6 +1,6 @@
 # PDF Editor
 
-A minimalist, Notion-inspired PDF editor built with **React**, **TypeScript**, **PDF.js**, and **Fabric.js**. Edit document text in-place with exact typography matching, draw annotations with vector brushes, and export documents with zero loss in fidelity.
+A minimalist, Notion-inspired full-stack PDF editor featuring in-place typography-matched text editing, dual-layer vector canvas with freehand brush and eraser, geometric shape annotations, and lossless PDF export.
 
 ---
 
@@ -9,8 +9,39 @@ A minimalist, Notion-inspired PDF editor built with **React**, **TypeScript**, *
 ### 1. Document Landing & File Ingestion
 ![PDF Editor Landing Page](screenshots/landing-page.png)
 
-### 2. Workspace & In-Place Text Editing
-![PDF Editor Document Workspace](screenshots/editor-workspace.png)
+### 2. Editor Workspace & In-Place Text Editing
+![PDF Editor Workspace](screenshots/editor-workspace.png)
+
+---
+
+## 📁 Repository Structure
+
+This repository is organized as a unified monorepo containing both the frontend client and the backend processing service:
+
+```text
+pdf-editor/
+├── frontend/                  # React 19 + TypeScript + Vite + Tailwind CSS
+│   ├── src/
+│   │   ├── components/        # Canvas, toolbars, properties inspector, dropzone
+│   │   ├── services/          # Backend API client (extract-blocks & edits)
+│   │   ├── utils/             # Lossless vector PDF export (pdf-lib & SVG stamping)
+│   │   └── index.css          # Notion design system tokens
+│   ├── public/                # Static assets & PDF.js web worker
+│   ├── screenshots/           # UI preview screenshots
+│   └── package.json           # Frontend dependencies & scripts
+├── backend/                   # Node.js + Express + TypeScript service
+│   ├── src/
+│   │   ├── controllers/       # PDF controllers (extract-blocks & server-side edit)
+│   │   ├── services/          # PDF text & document manipulation services
+│   │   ├── middleware/        # Upload limits & payload validation
+│   │   ├── routes/            # RESTful API endpoints
+│   │   └── server.ts          # Server entry point (Port 5000)
+│   └── package.json           # Backend dependencies & scripts
+├── screenshots/               # Repository preview images
+├── package.json               # Root workspace orchestrator
+├── .gitignore                 # Unified ignore rules
+└── README.md                  # Project documentation
+```
 
 ---
 
@@ -18,76 +49,96 @@ A minimalist, Notion-inspired PDF editor built with **React**, **TypeScript**, *
 
 - **🎨 Notion-Inspired Minimalism**:
   - Warm paper aesthetic (`#F7F6F3`), charcoal typography (`#37352F`), and crisp 1px borders.
-  - Minimalist floating toolbars, micro-formatting popovers, and an inspector sidebar.
+  - Floating left toolbar, contextual floating micro-formatting popover, and collapsible right properties inspector.
 
 - **✏️ Sub-Pixel In-Place Text Editing**:
-  - Click directly on any text line in the PDF to edit it in place.
-  - Automatic detection of font family (Serif, Sans, Monospace), font size, weight, and style.
-  - Interactive micro-toolbar for formatting: **Bold** (`Ctrl+B`), **Italic** (`Ctrl+I`), text reset, and deletion (whiteout mask).
-  - Drag-and-drop handles to move text blocks anywhere on the page.
+  - Click directly on any text block in the PDF to edit it inline with exact font family, size, weight, and style matching.
+  - Interactive micro-toolbar for formatting: **Bold** (`Ctrl+B`), **Italic** (`Ctrl+I`), original text reset, and deletion (whiteout mask).
+  - Drag-and-drop handles to move edited text blocks anywhere on the page with automatic background whiteout mask.
 
-- **🖌️ Freehand Painter & Vector Drawing**:
+- **🖌️ Dual-Layer Vector Canvas & Freehand Painter**:
   - Dual-layer Fabric.js canvas synchronized with the high-DPI PDF page viewport.
   - **Pen & Marker**: Presets for Fine (2px), Medium (4px), Thick (8px), and Marker (16px).
-  - **Highlighter Mode**: Translucent highlighting for emphasizing key text.
-  - **Stroke Eraser**: Click or drag over drawing strokes to remove them instantly while leaving PDF content untouched.
-  - **Clear Page**: One-click action to remove all drawings on the current page.
+  - **Highlighter Mode**: Semi-transparent yellow highlighting for emphasizing document passages.
+  - **Stroke Eraser**: Click or drag over vector strokes to remove them instantly without affecting underlying PDF text.
+  - **Clear Page**: One-click action to remove all vector strokes on the current page.
 
-- **📐 Shape Annotation**:
-  - Add Rectangles and Circles with editable dimensions (width, height, diameter) and colors via the right properties panel.
-  - Full keyboard deletion (`Delete` / `Backspace`).
+- **📐 Geometric Shape Annotations**:
+  - Add Rectangles and Circles with custom fill and stroke colors.
+  - Adjust width, height, and stroke properties in real time using the right inspector panel.
+  - Keyboard deletion (`Delete` / `Backspace`).
 
 - **⏳ Page Navigation & Loading States**:
   - Centered Notion-style loading spinner between page transitions.
-  - Segmented top pagination pill with integrated loading indicator.
+  - Segmented top pagination pill with integrated loading indicator and zoom reset controls.
 
 - **💾 Lossless Vector Export**:
-  - Exports modified PDF documents embedding new text, whiteout overlays, and vector SVG drawings.
-  - All annotations persist cleanly across page changes.
+  - Client-side and server-side PDF generation embedding new text, whiteout overlays, and vector SVG drawings with zero quality degradation.
 
-- **🔒 100% Private & Local**:
-  - All document parsing, vector rendering, and annotation processing run directly in the browser.
+- **🔒 100% Private & Local-First**:
+  - Direct browser execution with optional backend services for server-assisted document block extraction and batch editing.
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Framework**: [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
-- **Build Tool**: [Vite](https://vite.dev/)
-- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
-- **PDF Rendering**: [PDF.js (pdfjs-dist)](https://mozilla.github.io/pdf.js/)
-- **Vector Canvas**: [Fabric.js v6](https://fabricjs.com/)
-- **PDF Manipulation**: [pdf-lib](https://pdf-lib.js.org/)
-- **Icons**: [Lucide React](https://lucide.dev/)
+| Layer | Technologies |
+| :--- | :--- |
+| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS v4, Fabric.js v7, PDF.js (pdfjs-dist), pdf-lib, Lucide React |
+| **Backend** | Node.js, Express 5, TypeScript, tsx, Multer, pdf-lib, pdfjs-dist, Zod |
+| **Styling** | Tailwind CSS v4, Notion Design Tokens (`#F7F6F3`, `#37352F`, `#2383E2`) |
+
+---
+
+## 🔌 Backend API Endpoints
+
+The backend runs on `http://localhost:5000` and provides the following RESTful services:
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/pdf/upload` | Validates and accepts PDF uploads (up to 20MB). |
+| `POST` | `/pdf/extract-blocks` | Parses PDF documents and extracts positional text blocks with typography metadata. |
+| `POST` | `/pdf/edit` | Applies server-side text edits, whiteouts, and stamps onto the target PDF. |
 
 ---
 
 ## 🚀 Getting Started
 
-### 1. Installation
+### 1. Prerequisites
+- **Node.js**: v20+ recommended
+- **npm**: v10+
+
+### 2. Installation
+
+Clone the repository and install all dependencies:
 
 ```bash
 # Clone the repository
 git clone https://github.com/UL2IMATE/pdf-editor.git
 cd pdf-editor
 
-# Install dependencies
-npm install
+# Install dependencies across all workspaces
+npm run install:all
 ```
 
-### 2. Development Server
+### 3. Running in Development
+
+You can start both frontend and backend concurrently or run them in separate terminals:
 
 ```bash
-npm run dev
+# Terminal 1 - Start the Frontend (http://localhost:5173)
+npm run frontend:dev
+
+# Terminal 2 - Start the Backend (http://localhost:5000)
+npm run backend:dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+### 4. Production Build
 
-### 3. Production Build
+To compile both frontend and backend for production:
 
 ```bash
 npm run build
-npm run preview
 ```
 
 ---
@@ -99,7 +150,7 @@ npm run preview
 | `Ctrl + B` / `⌘ + B` | Toggle **Bold** on selected text edit |
 | `Ctrl + I` / `⌘ + I` | Toggle *Italic* on selected text edit |
 | `Enter` / `Esc` | Commit inline text edits |
-| `Delete` / `Backspace` | Delete active shape, stroke, or text box |
+| `Delete` / `Backspace` | Delete selected shape, drawing stroke, or text box |
 
 ---
 
