@@ -33,7 +33,7 @@ export const MainPage = ({ handleUrl, handleFile }: MainPageProps) => {
             Open PDF Document
           </h2>
           <p className="text-xs text-[#787774] leading-relaxed max-w-xs">
-            Edit text in-place with exact font matching, draw vector annotations, and export losslessly.
+            Edit text in-place, add digital signatures & stamps, organize pages, and export losslessly.
           </p>
         </div>
 

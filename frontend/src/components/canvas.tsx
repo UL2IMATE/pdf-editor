@@ -4,6 +4,7 @@ import {
   useState,
   forwardRef,
   useImperativeHandle,
+  useCallback,
 } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
@@ -11,6 +12,7 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  RotateCw,
   Square,
   Circle,
   Type,
@@ -24,6 +26,11 @@ import {
   Highlighter,
   Eraser,
   Loader2,
+  PenTool,
+  ArrowRight,
+  StickyNote,
+  Hand,
+  MousePointer,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -31,8 +38,14 @@ import {
   Rect,
   Circle as FabricCircle,
   PencilBrush,
+  FabricImage,
+  Path,
+  Textbox,
+  Shadow,
 } from "fabric";
 import Settings from "./setting";
+import { SignatureModal } from "./SignatureModal";
+import type { ManagedPage } from "../types/pdf";
 import {
   exportPdfWithAnnotations,
   downloadPdfBlob,
@@ -358,25 +371,53 @@ function sampleTextAndBgColor(
   }
 }
 
+const FABRIC_EXPORT_PROPS = [
+  "customType",
+  "padding",
+  "backgroundColor",
+  "rx",
+  "ry",
+  "stroke",
+  "strokeWidth",
+  "lineHeight",
+];
+
 export type CanvasHandle = {
   exportDocument: () => Promise<void>;
+  addSignatureOrImage: (dataUrl: string) => Promise<void>;
+  openSignatureModal: () => void;
 };
 
 type CanvasProps = {
   pageNumber: number;
   pdfUrl?: string;
   pdfFile?: File;
-  onLoadSuccess?: (numPages: number) => void;
+  managedPages?: ManagedPage[];
+  onLoadSuccess?: (numPages: number, docProxy?: any) => void;
   onPageRenderingChange?: (rendering: boolean) => void;
+  onRotateCurrentPage?: () => void;
+  isSidebarOpen?: boolean;
 };
 
 export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
-  { pageNumber, pdfUrl, pdfFile, onLoadSuccess, onPageRenderingChange },
+  {
+    pageNumber,
+    pdfUrl,
+    pdfFile,
+    managedPages,
+    onLoadSuccess,
+    onPageRenderingChange,
+    onRotateCurrentPage,
+    isSidebarOpen = false,
+  },
   ref
 ) {
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const currentPageConfig = managedPages?.[pageNumber - 1];
+  const currentPageKey = currentPageConfig ? currentPageConfig.id : String(pageNumber);
 
   const onLoadSuccessRef = useRef(onLoadSuccess);
   onLoadSuccessRef.current = onLoadSuccess;
@@ -408,12 +449,13 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const [isExtracting, setIsExtracting] = useState(false);
   const [showDetectedBlocks, setShowDetectedBlocks] = useState(false);
 
-  // MS Word-style text edits (persisted per page)
-  const [pageEdits, setPageEdits] = useState<Record<number, TextEdit[]>>({});
+  // MS Word-style text edits (persisted per page key)
+  const [pageEdits, setPageEdits] = useState<Record<string, TextEdit[]>>({});
   const [activeEditId, setActiveEditId] = useState<string | null>(null);
   const activeInputRef = useRef<HTMLInputElement | null>(null);
 
-
+  // Signature & Stamps Modal state
+  const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
 
   // Painter / Freehand Drawing state & Eraser
   const [isDrawingMode, setIsDrawingMode] = useState(false);
@@ -422,13 +464,56 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const [brushWidth, setBrushWidth] = useState(4);
   const [isHighlighter, setIsHighlighter] = useState(false);
 
+  // Hand / Pan Tool state
+  const [isHandTool, setIsHandTool] = useState(false);
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const isPanningMode = isHandTool || isSpacePressed;
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef<{
+    x: number;
+    y: number;
+    scrollLeft: number;
+    scrollTop: number;
+  } | null>(null);
+
+  const getScrollContainer = useCallback(() => {
+    return fabricCanvasElRef.current?.closest(".overflow-auto") as HTMLElement | null;
+  }, []);
+
+  const toggleHandTool = useCallback(() => {
+    setIsHandTool((prev) => {
+      const next = !prev;
+      if (next) {
+        setIsDrawingMode(false);
+        setIsEraserMode(false);
+        if (fabricInstanceRef.current) {
+          fabricInstanceRef.current.isDrawingMode = false;
+          fabricInstanceRef.current.discardActiveObject();
+          fabricInstanceRef.current.renderAll();
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  const selectPointerTool = useCallback(() => {
+    setIsHandTool(false);
+    setIsDrawingMode(false);
+    setIsEraserMode(false);
+    if (fabricInstanceRef.current) {
+      fabricInstanceRef.current.isDrawingMode = false;
+      fabricInstanceRef.current.defaultCursor = "default";
+      fabricInstanceRef.current.renderAll();
+    }
+  }, []);
+
   // Page rendering spinner state
   const [isPageRendering, setIsPageRendering] = useState(false);
 
   const handleToggleBold = (editId: string) => {
     setPageEdits((prev) => ({
       ...prev,
-      [pageNumber]: (prev[pageNumber] || []).map((item) => {
+      [currentPageKey]: (prev[currentPageKey] || []).map((item) => {
         if (item.id !== editId) return item;
         const currentlyBold = isBoldWeight(item.fontWeight);
         return {
@@ -442,7 +527,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const handleToggleItalic = (editId: string) => {
     setPageEdits((prev) => ({
       ...prev,
-      [pageNumber]: (prev[pageNumber] || []).map((item) => {
+      [currentPageKey]: (prev[currentPageKey] || []).map((item) => {
         if (item.id !== editId) return item;
         const currentlyItalic = isItalicStyle(item.fontStyle);
         return {
@@ -462,7 +547,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     if (!activeEditId) return;
     setPageEdits((prev) => ({
       ...prev,
-      [pageNumber]: (prev[pageNumber] || []).map((item) => {
+      [currentPageKey]: (prev[currentPageKey] || []).map((item) => {
         if (item.id !== activeEditId) return item;
         const newFontSize = updates.fontSize ?? item.fontSize;
         const newHeight = updates.fontSize
@@ -505,6 +590,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     const nextMode = !isDrawingMode;
     setIsDrawingMode(nextMode);
     setIsEraserMode(false);
+    setIsHandTool(false);
 
     const fCanvas = fabricInstanceRef.current;
     if (fCanvas) {
@@ -516,7 +602,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         updateFabricBrush(fCanvas, brushColor, brushWidth, isHighlighter);
       } else {
         // Save current page annotations when exiting painter mode so drawings are permanently kept
-        pageAnnotationsRef.current[pageNumber] = fCanvas.toJSON();
+        pageAnnotationsRef.current[pageKeyRef.current] = fCanvas.toJSON();
       }
       fCanvas.renderAll();
     }
@@ -525,6 +611,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const toggleEraserMode = () => {
     const nextEraser = !isEraserMode;
     setIsEraserMode(nextEraser);
+    setIsHandTool(false);
 
     const fCanvas = fabricInstanceRef.current;
     if (fCanvas) {
@@ -549,7 +636,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     pathObjects.forEach((obj) => fCanvas.remove(obj));
     fCanvas.discardActiveObject();
     fCanvas.renderAll();
-    pageAnnotationsRef.current[pageNumberRef.current] = fCanvas.toJSON();
+    pageAnnotationsRef.current[pageKeyRef.current] = fCanvas.toJSON();
   };
 
   const setBrushColorAndApply = (color: string) => {
@@ -591,10 +678,10 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     }
   };
 
-  const pageAnnotationsRef = useRef<Record<number, any>>({});
-  const prevPageNumberRef = useRef<number>(pageNumber);
-  const pageNumberRef = useRef<number>(pageNumber);
-  pageNumberRef.current = pageNumber;
+  const pageAnnotationsRef = useRef<Record<string, any>>({});
+  const prevPageKeyRef = useRef<string>(currentPageKey);
+  const pageKeyRef = useRef<string>(currentPageKey);
+  pageKeyRef.current = currentPageKey;
 
   const isDrawingModeRef = useRef(isDrawingMode);
   isDrawingModeRef.current = isDrawingMode;
@@ -626,6 +713,154 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     setScale(1.5);
   };
 
+  // Update scroll container cursor during panning
+  useEffect(() => {
+    const container = getScrollContainer();
+    if (!container) return;
+
+    if (isPanningMode) {
+      container.style.cursor = isPanning ? "grabbing" : "grab";
+    } else {
+      container.style.cursor = "";
+    }
+
+    return () => {
+      container.style.cursor = "";
+    };
+  }, [isPanningMode, isPanning, getScrollContainer]);
+
+  // Pointer drag panning on scroll container (handles Space+drag, Hand tool drag, and Middle-mouse drag)
+  useEffect(() => {
+    const container = getScrollContainer();
+    if (!container) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button === 1 || (isPanningMode && e.button === 0)) {
+        e.preventDefault();
+        setIsPanning(true);
+        panStartRef.current = {
+          x: e.clientX,
+          y: e.clientY,
+          scrollLeft: container.scrollLeft,
+          scrollTop: container.scrollTop,
+        };
+      }
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!panStartRef.current) return;
+      const dx = e.clientX - panStartRef.current.x;
+      const dy = e.clientY - panStartRef.current.y;
+      container.scrollLeft = panStartRef.current.scrollLeft - dx;
+      container.scrollTop = panStartRef.current.scrollTop - dy;
+    };
+
+    const onPointerUp = () => {
+      if (panStartRef.current) {
+        panStartRef.current = null;
+        setIsPanning(false);
+      }
+    };
+
+    container.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+
+    return () => {
+      container.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [isPanningMode, getScrollContainer]);
+
+  // Keyboard shortcut listeners (Spacebar for pan, H for Hand tool, V for Select tool)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const isTyping =
+        activeEl?.tagName === "INPUT" ||
+        activeEl?.tagName === "TEXTAREA" ||
+        (activeEl as HTMLElement)?.isContentEditable;
+      if (isTyping) return;
+
+      if (e.code === "Space" && !e.repeat) {
+        e.preventDefault();
+        setIsSpacePressed(true);
+      }
+
+      if (
+        (e.key === "h" || e.key === "H") &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        e.preventDefault();
+        toggleHandTool();
+      }
+
+      if (
+        (e.key === "v" || e.key === "V") &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        e.preventDefault();
+        selectPointerTool();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        setIsSpacePressed(false);
+      }
+    };
+
+    const handleBlur = () => {
+      setIsSpacePressed(false);
+      panStartRef.current = null;
+      setIsPanning(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, [toggleHandTool, selectPointerTool]);
+
+  // Sync fabric canvas interaction state during panning
+  useEffect(() => {
+    const fCanvas = fabricInstanceRef.current;
+    if (!fCanvas) return;
+
+    if (isPanningMode) {
+      fCanvas.selection = false;
+      fCanvas.defaultCursor = isPanning ? "grabbing" : "grab";
+      fCanvas.forEachObject((obj) => {
+        obj.selectable = false;
+        obj.evented = false;
+      });
+      fCanvas.discardActiveObject();
+      fCanvas.renderAll();
+    } else {
+      fCanvas.selection = true;
+      fCanvas.defaultCursor = isDrawingMode
+        ? "default"
+        : isEraserMode
+        ? "crosshair"
+        : "default";
+      fCanvas.forEachObject((obj) => {
+        obj.selectable = true;
+        obj.evented = true;
+      });
+      fCanvas.renderAll();
+    }
+  }, [isPanningMode, isPanning, isDrawingMode, isEraserMode]);
+
   // Initialize Fabric canvas strictly for vector shapes (Rectangles, Circles)
   useEffect(() => {
     if (fabricCanvasElRef.current && !fabricInstanceRef.current) {
@@ -639,8 +874,8 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
       const persistPageAnnotations = () => {
         if (fabricInstanceRef.current) {
-          pageAnnotationsRef.current[pageNumberRef.current] =
-            fabricInstanceRef.current.toJSON();
+          pageAnnotationsRef.current[pageKeyRef.current] =
+            fabricInstanceRef.current.toObject(FABRIC_EXPORT_PROPS);
         }
       };
 
@@ -657,8 +892,8 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         initCanvas.discardActiveObject();
         initCanvas.renderAll();
         if (fabricInstanceRef.current) {
-          pageAnnotationsRef.current[pageNumberRef.current] =
-            fabricInstanceRef.current.toJSON();
+          pageAnnotationsRef.current[pageKeyRef.current] =
+            fabricInstanceRef.current.toObject(FABRIC_EXPORT_PROPS);
         }
       };
 
@@ -1014,7 +1249,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         if (isCancelled) return;
         setPdfDoc(doc);
         setLoading(false);
-        onLoadSuccessRef.current?.(doc.numPages);
+        onLoadSuccessRef.current?.(doc.numPages, doc);
       })
       .catch((err: Error) => {
         if (isCancelled) return;
@@ -1034,14 +1269,15 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     const fCanvas = fabricInstanceRef.current;
     if (!fCanvas) return;
 
-    if (prevPageNumberRef.current && prevPageNumberRef.current !== pageNumber) {
-      pageAnnotationsRef.current[prevPageNumberRef.current] = fCanvas.toJSON();
+    if (prevPageKeyRef.current && prevPageKeyRef.current !== currentPageKey) {
+      pageAnnotationsRef.current[prevPageKeyRef.current] =
+        fCanvas.toObject(FABRIC_EXPORT_PROPS);
     }
-    prevPageNumberRef.current = pageNumber;
+    prevPageKeyRef.current = currentPageKey;
 
     fCanvas.clear();
 
-    const savedData = pageAnnotationsRef.current[pageNumber];
+    const savedData = pageAnnotationsRef.current[currentPageKey];
     if (savedData) {
       fCanvas.loadFromJSON(savedData).then(() => {
         fCanvas.setZoom(scale);
@@ -1069,7 +1305,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       fCanvas.renderAll();
     }
     setActiveEditId(null);
-  }, [pageNumber]);
+  }, [currentPageKey]);
 
   // High-DPI Razor-Sharp PDF Rendering
   useEffect(() => {
@@ -1083,7 +1319,11 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       return;
     }
 
-    const targetPage = Math.max(1, Math.min(pageNumber, pdfDoc.numPages));
+    const targetOriginalPage = currentPageConfig
+      ? currentPageConfig.originalIndex + 1
+      : Math.max(1, Math.min(pageNumber, pdfDoc.numPages));
+
+    const additionalRotation = currentPageConfig?.rotation || 0;
 
     if (renderTaskRef.current) {
       renderTaskRef.current.cancel();
@@ -1095,12 +1335,14 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     onPageRenderingChangeRef.current?.(true);
 
     pdfDoc
-      .getPage(targetPage)
+      .getPage(targetOriginalPage)
       .then((page) => {
         if (!isEffectActive) return;
 
         const dpr = window.devicePixelRatio || 1;
-        const viewport = page.getViewport({ scale });
+        const totalRotation =
+          (((page.rotate || 0) + additionalRotation) % 360 + 360) % 360;
+        const viewport = page.getViewport({ scale, rotation: totalRotation });
         const pdfCanvas = pdfCanvasRef.current;
         if (!pdfCanvas) return;
 
@@ -1158,41 +1400,138 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         renderTaskRef.current = null;
       }
     };
-  }, [pdfDoc, pageNumber, scale]);
+  }, [
+    pdfDoc,
+    pageNumber,
+    scale,
+    currentPageConfig?.originalIndex,
+    currentPageConfig?.rotation,
+  ]);
 
   // Toolbar: Add Rectangle Shape
   const addRectangle = () => {
+    setIsHandTool(false);
     if (fabricInstanceRef.current) {
       const rect = new Rect({
-        top: 100,
-        left: 100,
-        width: 120,
-        height: 80,
-        fill: "#3b82f6",
+        top: 120,
+        left: 120,
+        width: 140,
+        height: 90,
+        fill: "rgba(59, 130, 246, 0.2)",
+        stroke: "#2563eb",
+        strokeWidth: 2,
+        rx: 4,
+        ry: 4,
+        cornerColor: "#2383E2",
+        cornerStrokeColor: "#ffffff",
+        cornerSize: 8,
+        transparentCorners: false,
       });
+      (rect as any).customType = "rectangle";
       fabricInstanceRef.current.add(rect);
       fabricInstanceRef.current.setActiveObject(rect);
       fabricInstanceRef.current.renderAll();
+      pageAnnotationsRef.current[currentPageKey] =
+        fabricInstanceRef.current.toObject(FABRIC_EXPORT_PROPS);
     }
   };
 
   // Toolbar: Add Circle Shape
   const addCircle = () => {
+    setIsHandTool(false);
     if (fabricInstanceRef.current) {
       const circle = new FabricCircle({
-        top: 100,
-        left: 100,
-        radius: 50,
-        fill: "#ef4444",
+        top: 120,
+        left: 120,
+        radius: 45,
+        fill: "rgba(239, 68, 68, 0.2)",
+        stroke: "#dc2626",
+        strokeWidth: 2,
+        cornerColor: "#2383E2",
+        cornerStrokeColor: "#ffffff",
+        cornerSize: 8,
+        transparentCorners: false,
       });
+      (circle as any).customType = "circle";
       fabricInstanceRef.current.add(circle);
       fabricInstanceRef.current.setActiveObject(circle);
       fabricInstanceRef.current.renderAll();
+      pageAnnotationsRef.current[currentPageKey] =
+        fabricInstanceRef.current.toObject(FABRIC_EXPORT_PROPS);
+    }
+  };
+
+  // Toolbar: Add Arrow Shape
+  const addArrow = () => {
+    setIsHandTool(false);
+    if (fabricInstanceRef.current) {
+      const arrowPath =
+        "M 0 10 L 85 10 L 78 2 L 115 15 L 78 28 L 85 20 L 0 20 Z";
+      const arrow = new Path(arrowPath, {
+        top: 140,
+        left: 140,
+        fill: "#2563eb",
+        stroke: "#1d4ed8",
+        strokeWidth: 1,
+        scaleX: 1.2,
+        scaleY: 1.2,
+        cornerColor: "#2383E2",
+        cornerStrokeColor: "#ffffff",
+        cornerSize: 8,
+        transparentCorners: false,
+      });
+      (arrow as any).customType = "arrow";
+      fabricInstanceRef.current.add(arrow);
+      fabricInstanceRef.current.setActiveObject(arrow);
+      fabricInstanceRef.current.renderAll();
+      pageAnnotationsRef.current[currentPageKey] =
+        fabricInstanceRef.current.toObject(FABRIC_EXPORT_PROPS);
+    }
+  };
+
+  // Toolbar: Add High-Contrast Sticky Note
+  const addStickyNote = () => {
+    setIsHandTool(false);
+    if (fabricInstanceRef.current) {
+      const sticky = new Textbox("Note:\nWrite your comments or thoughts here...", {
+        top: 140,
+        left: 140,
+        width: 180,
+        minWidth: 120,
+        fontSize: 14,
+        fontWeight: "500",
+        lineHeight: 1.35,
+        fontFamily: "Arial, sans-serif",
+        fill: "#0f172a", // crisp high-contrast near-black ink
+        backgroundColor: "#fef08a", // classic warm yellow
+        stroke: "#ca8a04", // strong golden-amber border for high contrast on white PDF
+        strokeWidth: 2,
+        padding: 12,
+        rx: 3,
+        ry: 3,
+        cornerColor: "#2383E2",
+        cornerStrokeColor: "#ffffff",
+        cornerSize: 8,
+        transparentCorners: false,
+        shadow: new Shadow({
+          color: "rgba(0,0,0,0.18)",
+          blur: 10,
+          offsetX: 2,
+          offsetY: 4,
+        }),
+      });
+      (sticky as any).customType = "stickyNote";
+      fabricInstanceRef.current.add(sticky);
+      fabricInstanceRef.current.setActiveObject(sticky);
+      fabricInstanceRef.current.renderAll();
+      pageAnnotationsRef.current[currentPageKey] =
+        fabricInstanceRef.current.toObject(FABRIC_EXPORT_PROPS);
     }
   };
 
   // Toolbar: Add New In-Place Word-Style Text Block
   const addText = () => {
+    setIsHandTool(false);
     const newId = `custom-text-${Date.now()}`;
     const newEdit: TextEdit = {
       id: newId,
@@ -1217,14 +1556,14 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
     setPageEdits((prev) => ({
       ...prev,
-      [pageNumber]: [...(prev[pageNumber] || []), newEdit],
+      [currentPageKey]: [...(prev[currentPageKey] || []), newEdit],
     }));
     setActiveEditId(newId);
   };
 
   // Clicking an original PDF text block activates MS Word-style inline editing
   const handleStartEditingBlock = (block: DetailedTextBlock) => {
-    const existingEdits = pageEdits[pageNumber] || [];
+    const existingEdits = pageEdits[currentPageKey] || [];
     let edit = existingEdits.find((e) => e.id === block.id);
 
     if (!edit) {
@@ -1263,7 +1602,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
       setPageEdits((prev) => ({
         ...prev,
-        [pageNumber]: [...(prev[pageNumber] || []), edit!],
+        [currentPageKey]: [...(prev[currentPageKey] || []), edit!],
       }));
     } else if (!edit.isCustom) {
       const normalized = normalizeTextColor(edit.color);
@@ -1271,7 +1610,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         edit = { ...edit, color: normalized };
         setPageEdits((prev) => ({
           ...prev,
-          [pageNumber]: (prev[pageNumber] || []).map((e) =>
+          [currentPageKey]: (prev[currentPageKey] || []).map((e) =>
             e.id === edit!.id ? edit! : e
           ),
         }));
@@ -1305,10 +1644,10 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       const dy = (moveEvent.clientY - startPointerY) / scale;
 
       setPageEdits((prev) => {
-        const list = prev[pageNumber] || [];
+        const list = prev[currentPageKey] || [];
         return {
           ...prev,
-          [pageNumber]: list.map((item) => {
+          [currentPageKey]: list.map((item) => {
             if (item.id !== editId) return item;
             const newX = Math.round((initialX + dx) * 10) / 10;
             const newY = Math.round((initialY + dy) * 10) / 10;
@@ -1335,10 +1674,10 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
   const handleTextChange = (id: string, newText: string) => {
     setPageEdits((prev) => {
-      const currentList = prev[pageNumber] || [];
+      const currentList = prev[currentPageKey] || [];
       return {
         ...prev,
-        [pageNumber]: currentList.map((e) =>
+        [currentPageKey]: currentList.map((e) =>
           e.id === id ? { ...e, text: newText } : e
         ),
       };
@@ -1347,10 +1686,10 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
   const handleResetEdit = (id: string) => {
     setPageEdits((prev) => {
-      const currentList = prev[pageNumber] || [];
+      const currentList = prev[currentPageKey] || [];
       return {
         ...prev,
-        [pageNumber]: currentList.filter((e) => e.id !== id),
+        [currentPageKey]: currentList.filter((e) => e.id !== id),
       };
     });
     setActiveEditId(null);
@@ -1358,7 +1697,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
   const handleDeleteEdit = (id: string) => {
     setPageEdits((prev) => {
-      const currentList = prev[pageNumber] || [];
+      const currentList = prev[currentPageKey] || [];
       const target = currentList.find((e) => e.id === id);
       if (!target) return prev;
 
@@ -1366,7 +1705,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         // Custom text box: delete completely
         return {
           ...prev,
-          [pageNumber]: currentList.filter((e) => e.id !== id),
+          [currentPageKey]: currentList.filter((e) => e.id !== id),
         };
       } else {
         // Original PDF text: if already erased/empty, remove edit completely
@@ -1374,12 +1713,12 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         if (target.text === "") {
           return {
             ...prev,
-            [pageNumber]: currentList.filter((e) => e.id !== id),
+            [currentPageKey]: currentList.filter((e) => e.id !== id),
           };
         } else {
           return {
             ...prev,
-            [pageNumber]: currentList.map((e) =>
+            [currentPageKey]: currentList.map((e) =>
               e.id === id ? { ...e, text: "" } : e
             ),
           };
@@ -1389,9 +1728,53 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     setActiveEditId(null);
   };
 
-  const activeEdit = (pageEdits[pageNumber] || []).find(
+  const activeEdit = (pageEdits[currentPageKey] || []).find(
     (e) => e.id === activeEditId
   );
+
+  // Digital Signature & Stamp Placement
+  const addSignatureOrImage = async (dataUrl: string) => {
+    const fCanvas = fabricInstanceRef.current;
+    if (!fCanvas) return;
+
+    try {
+      const img = await FabricImage.fromURL(dataUrl);
+
+      // Scale image nicely to fit canvas (default width 180-220px, max 35% of canvas)
+      const targetWidth = Math.min(220, (canvasSize.width || 600) * 0.35);
+      const scaleFactor = targetWidth / (img.width || targetWidth);
+      img.scale(scaleFactor);
+
+      // Position in center of current viewport
+      const left = Math.max(
+        20,
+        ((canvasSize.width || 600) - img.getScaledWidth()) / 2
+      );
+      const top = Math.max(
+        20,
+        ((canvasSize.height || 800) - img.getScaledHeight()) / 2
+      );
+
+      img.set({
+        left,
+        top,
+        cornerColor: "#2383E2",
+        cornerStrokeColor: "#ffffff",
+        borderColor: "#2383E2",
+        cornerSize: 8,
+        transparentCorners: false,
+      });
+
+      fCanvas.add(img);
+      fCanvas.setActiveObject(img);
+      fCanvas.renderAll();
+
+      pageAnnotationsRef.current[currentPageKey] =
+        fCanvas.toObject(FABRIC_EXPORT_PROPS);
+    } catch (err) {
+      console.error("Failed to add image/signature to canvas:", err);
+    }
+  };
 
   // PDF Export
   useImperativeHandle(ref, () => ({
@@ -1401,23 +1784,33 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       }
 
       if (fabricInstanceRef.current) {
-        pageAnnotationsRef.current[pageNumber] =
-          fabricInstanceRef.current.toJSON();
+        pageAnnotationsRef.current[currentPageKey] =
+          fabricInstanceRef.current.toObject(FABRIC_EXPORT_PROPS);
       }
 
       const pdfBytes = await exportPdfWithAnnotations({
         pdfUrl,
         pageAnnotations: pageAnnotationsRef.current,
         currentPageNumber: pageNumber,
-        currentFabricData: fabricInstanceRef.current?.toJSON(),
+        currentPageId: currentPageKey,
+        currentFabricData:
+          fabricInstanceRef.current?.toObject(FABRIC_EXPORT_PROPS),
         pageTextEdits: pageEdits,
+        pagesConfig: managedPages,
       });
 
       downloadPdfBlob(pdfBytes, "edited-document.pdf");
     },
+    addSignatureOrImage,
+    openSignatureModal: () => setIsSignatureModalOpen(true),
   }));
 
-  const currentPageData = extractedPages.find((p) => p.pageNumber === pageNumber);
+  const targetOriginalPage = currentPageConfig
+    ? currentPageConfig.originalIndex + 1
+    : pageNumber;
+  const currentPageData = extractedPages.find(
+    (p) => p.pageNumber === targetOriginalPage
+  );
   const currentBlocks = currentPageData ? currentPageData.blocks : [];
 
   return (
@@ -1460,23 +1853,41 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       {/* Floating Toolbar on Left */}
       {pdfDoc && !loading && !error && (
         <div
-          className="flex flex-col gap-1 p-1 fixed top-1/2 -translate-y-1/2 left-5 bg-white/95 backdrop-blur-md border border-[#37352F]/15 shadow-[0_4px_16px_rgba(15,15,15,0.08),0_1px_3px_rgba(15,15,15,0.04)] rounded-xl z-40 text-[#37352F] select-none"
+          data-toolbar="true"
+          className={`flex flex-col gap-1 p-1 fixed top-1/2 -translate-y-1/2 ${
+            isSidebarOpen ? "left-[228px]" : "left-5"
+          } transition-all duration-200 bg-white/95 backdrop-blur-md border border-[#37352F]/15 shadow-[0_4px_16px_rgba(15,15,15,0.08),0_1px_3px_rgba(15,15,15,0.04)] rounded-xl z-40 text-[#37352F] select-none`}
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Select / Pointer Tool */}
           <button
-            onClick={addRectangle}
-            className="p-2 hover:bg-[#37352F]/5 rounded-lg transition text-[#787774] hover:text-[#37352F] cursor-pointer"
-            title="Add Rectangle"
+            onClick={selectPointerTool}
+            className={`p-2 rounded-lg transition cursor-pointer relative ${
+              !isHandTool && !isDrawingMode && !isEraserMode
+                ? "bg-[#242424] text-white shadow-2xs"
+                : "hover:bg-[#37352F]/5 text-[#787774] hover:text-[#37352F]"
+            }`}
+            title="Select Tool (V)"
           >
-            <Square size={18} />
+            <MousePointer size={18} />
           </button>
+
+          {/* Hand / Pan Tool */}
           <button
-            onClick={addCircle}
-            className="p-2 hover:bg-[#37352F]/5 rounded-lg transition text-[#787774] hover:text-[#37352F] cursor-pointer"
-            title="Add Circle"
+            onClick={toggleHandTool}
+            className={`p-2 rounded-lg transition cursor-pointer relative ${
+              isHandTool
+                ? "bg-[#242424] text-white shadow-2xs"
+                : "hover:bg-[#37352F]/5 text-[#787774] hover:text-[#37352F]"
+            }`}
+            title="Hand / Pan Tool (H or Spacebar + Drag)"
           >
-            <Circle size={18} />
+            <Hand size={18} />
           </button>
+
+          <div className="w-full h-px bg-[#37352F]/10 my-0.5" />
+
+          {/* Add Text */}
           <button
             onClick={addText}
             className="p-2 hover:bg-[#37352F]/5 rounded-lg transition text-[#787774] hover:text-[#37352F] cursor-pointer"
@@ -1484,6 +1895,55 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           >
             <Type size={18} />
           </button>
+
+          {/* Add Sticky Note */}
+          <button
+            onClick={addStickyNote}
+            className="p-2 hover:bg-[#37352F]/5 rounded-lg transition text-[#787774] hover:text-[#37352F] cursor-pointer"
+            title="Add Sticky Note"
+          >
+            <StickyNote size={18} />
+          </button>
+
+          {/* Add Rectangle */}
+          <button
+            onClick={addRectangle}
+            className="p-2 hover:bg-[#37352F]/5 rounded-lg transition text-[#787774] hover:text-[#37352F] cursor-pointer"
+            title="Add Rectangle"
+          >
+            <Square size={18} />
+          </button>
+
+          {/* Add Circle */}
+          <button
+            onClick={addCircle}
+            className="p-2 hover:bg-[#37352F]/5 rounded-lg transition text-[#787774] hover:text-[#37352F] cursor-pointer"
+            title="Add Circle"
+          >
+            <Circle size={18} />
+          </button>
+
+          {/* Add Arrow */}
+          <button
+            onClick={addArrow}
+            className="p-2 hover:bg-[#37352F]/5 rounded-lg transition text-[#787774] hover:text-[#37352F] cursor-pointer"
+            title="Add Arrow"
+          >
+            <ArrowRight size={18} />
+          </button>
+
+          {/* Digital Signature & Stamps */}
+          <button
+            onClick={() => {
+              setIsHandTool(false);
+              setIsSignatureModalOpen(true);
+            }}
+            className="p-2 hover:bg-[#37352F]/5 rounded-lg transition text-[#787774] hover:text-[#37352F] cursor-pointer"
+            title="Add Signature or Stamp"
+          >
+            <PenTool size={18} />
+          </button>
+
           {/* Fabric.js Painter Tool */}
           <button
             onClick={toggleDrawingMode}
@@ -1530,7 +1990,9 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       {/* Painter Control Palette (when Drawing Mode is active) */}
       {isDrawingMode && (
         <div
-          className="fixed top-16 left-20 z-40 bg-white/95 backdrop-blur-md text-[#37352F] px-3.5 py-1.5 rounded-xl shadow-[0_4px_20px_rgba(15,15,15,0.1),0_1px_3px_rgba(15,15,15,0.05)] border border-[#37352F]/15 flex items-center gap-2 text-xs select-none animate-in fade-in"
+          className={`fixed top-16 ${
+            isSidebarOpen ? "left-[236px]" : "left-20"
+          } transition-all duration-200 z-40 bg-white/95 backdrop-blur-md text-[#37352F] px-3.5 py-1.5 rounded-xl shadow-[0_4px_20px_rgba(15,15,15,0.1),0_1px_3px_rgba(15,15,15,0.05)] border border-[#37352F]/15 flex items-center gap-2 text-xs select-none animate-in fade-in`}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center gap-1.5 text-xs font-semibold text-[#37352F]">
@@ -1694,12 +2156,16 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           >
             <ZoomIn size={15} />
           </button>
+
+          <div className="w-px h-3.5 bg-[#37352F]/15 mx-0.5" />
+
+          {/* Rotate Page 90° Clockwise */}
           <button
-            onClick={handleResetZoom}
-            className="p-1 ml-0.5 rounded text-[#9B9A97] hover:text-[#37352F] hover:bg-[#37352F]/5 transition cursor-pointer"
-            title="Reset to 100%"
+            onClick={() => onRotateCurrentPage?.()}
+            className="p-1 rounded text-[#787774] hover:text-[#37352F] hover:bg-[#37352F]/5 transition cursor-pointer"
+            title="Rotate Page 90° Clockwise"
           >
-            <RotateCcw size={13} />
+            <RotateCw size={14} />
           </button>
         </div>
       )}
@@ -1763,7 +2229,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         >
           {/* A. Clickable Hitboxes for Original PDF Text */}
           {currentBlocks.map((block) => {
-            const isEdited = (pageEdits[pageNumber] || []).some(
+            const isEdited = (pageEdits[currentPageKey] || []).some(
               (e) => e.id === block.id
             );
             if (isEdited) return null; // Rendered in B below
@@ -1797,7 +2263,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           })}
 
           {/* B. Render Active and Committed MS Word-Style Text Edits */}
-          {(pageEdits[pageNumber] || []).map((edit) => {
+          {(pageEdits[currentPageKey] || []).map((edit) => {
             const isActive = activeEditId === edit.id;
             const editLeft = edit.x * scale;
             const editTop = edit.y * scale;
@@ -1973,7 +2439,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
                         if (estWidth > edit.width) {
                           setPageEdits((prev) => ({
                             ...prev,
-                            [pageNumber]: (prev[pageNumber] || []).map((item) =>
+                            [currentPageKey]: (prev[currentPageKey] || []).map((item) =>
                               item.id === edit.id
                                 ? { ...item, width: estWidth }
                                 : item
@@ -2075,7 +2541,23 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
             );
           })}
         </div>
+
+        {/* Layer 3: Panning Interaction Overlay (when Hand tool or Spacebar is active) */}
+        {isPanningMode && (
+          <div
+            className={`absolute inset-0 z-35 select-none ${
+              isPanning ? "cursor-grabbing" : "cursor-grab"
+            }`}
+          />
+        )}
       </div>
+
+      {/* Signature & Stamp Placement Modal */}
+      <SignatureModal
+        isOpen={isSignatureModalOpen}
+        onClose={() => setIsSignatureModalOpen(false)}
+        onInsert={addSignatureOrImage}
+      />
     </div>
   );
 });
