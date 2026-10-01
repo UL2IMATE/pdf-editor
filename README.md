@@ -4,6 +4,16 @@ A minimalist, Notion-inspired full-stack PDF editor featuring in-place typograph
 
 ---
 
+## 📸 Screenshots
+
+### 1. Document Landing & File Ingestion
+![PDF Editor Landing Page](screenshots/landing-page.png)
+
+### 2. Editor Workspace & In-Place Text Editing
+![PDF Editor Workspace](screenshots/editor-workspace.png)
+
+---
+
 ## ✨ Key Features
 
 ### ✏️ Sub-Pixel In-Place Text Editing
@@ -96,6 +106,7 @@ pdf-editor/
 │   │   ├── routes/            # RESTful API endpoints
 │   │   └── server.ts          # Server entry point (Port 5000)
 │   └── package.json           # Backend dependencies & scripts
+├── screenshots/           # Repository preview images
 ├── package.json               # Root workspace orchestrator
 ├── .gitignore                 # Unified ignore rules
 └── README.md                  # Project documentation
