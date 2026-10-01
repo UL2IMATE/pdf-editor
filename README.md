@@ -1,33 +1,92 @@
 # PDF Editor
 
-A minimalist, Notion-inspired full-stack PDF editor featuring in-place typography-matched text editing, dual-layer vector canvas with freehand brush and eraser, geometric shape annotations, and lossless PDF export.
+A minimalist, Notion-inspired full-stack PDF editor featuring in-place typography-matched text editing, digital signatures & stamps, page organization, collapsible thumbnail sidebar, smooth pan navigation, high-contrast sticky notes, and lossless multi-page PDF export.
 
 ---
 
-## 📸 Screenshots
+## ✨ Key Features
 
-### 1. Document Landing & File Ingestion
-![PDF Editor Landing Page](screenshots/landing-page.png)
+### ✏️ Sub-Pixel In-Place Text Editing
+- **Exact Typography Matching**: Click directly on any text line in the PDF to edit it inline with automatic font family, size, weight, and style matching.
+- **Micro-Toolbar Formatting**: Quick controls for **Bold** (`Ctrl+B`), **Italic** (`Ctrl+I`), original text reset, and deletion (whiteout mask).
+- **Drag-to-Move**: Freely reposition edited text blocks anywhere on the page with automatic background whiteout mask.
+- **Detected Text Outlines**: Toggle visual bounding boxes for all detected PDF text blocks with a single click.
 
-### 2. Editor Workspace & In-Place Text Editing
-![PDF Editor Workspace](screenshots/editor-workspace.png)
+### ✍️ Digital Signatures, Images & Business Stamps
+- **Draw Signature**: Interactive signature pad with smooth pen strokes, line width adjustments, and color presets (Ink Black, Navy Blue, Crimson Red).
+- **Business Stamp Presets**: Place high-visibility stamps with one click: **APPROVED**, **CONFIDENTIAL**, **DRAFT**, **FINAL**, **PAID**, **URGENT**, and **REJECTED**.
+- **Image & Seal Upload**: Place PNG, JPG, or SVG images/company seals onto the canvas with interactive resize handles and rotation.
+
+### 📑 Document Page Organizer
+- **Interactive Page Grid**: Dedicated page manager modal displaying all document pages as high-resolution cards.
+- **Reorder Pages**: Move pages backward or forward to re-sequence the document.
+- **Individual Page Rotation**: Rotate any page 90° clockwise independently.
+- **Duplicate & Delete**: Clone important pages or remove unneeded pages with automatic safeguards.
+
+### 🖼️ Collapsible Thumbnail Sidebar (Left Drawer)
+- **Live PDF Thumbnails**: Fast, high-DPI thumbnail preview rail rendered via PDF.js.
+- **Quick Jump**: Jump to any page instantly with a single click.
+- **Hover Quick-Rotate**: Rotate the hovered page directly from its thumbnail without opening the modal.
+- **Adaptive Layout**: The floating canvas toolbar smoothly shifts (`left-5` ↔ `left-[228px]`) as the sidebar opens and closes without overlapping.
+- **Toggle Shortcut**: Press `[` or click the sidebar icon in the header.
+
+### ✋ Hand / Pan Navigation Tool
+- **Smooth Viewport Panning**: Dedicated **Hand tool** (`H`) in the toolbar for navigating documents when zoomed in.
+- **Spacebar Quick-Pan**: Hold `Spacebar` and drag anywhere on the canvas for instant, tactile panning.
+- **Middle-Mouse Drag**: Click and drag with the mouse wheel at any time to pan without switching tools.
+- **Pointer Mode**: Press `V` to immediately switch back to the Select/Pointer tool.
+- **Interaction Guard**: Panning mode safely disables object and text selection to prevent accidental edits.
+
+### 📐 Shapes & High-Contrast Sticky Notes
+- **Geometric Shapes**: Add Rectangles, Circles, and Directional Arrows with customizable fills, borders, and corner radii.
+- **High-Contrast Sticky Notes**:
+  - Crisp `#0f172a` ink for maximum readability on white PDF backgrounds.
+  - Vivid border colors (Canary Yellow, Mint Green, Sky Blue, Rose Pink, Lavender, Warm Peach).
+  - Adjustable outline thickness (1px–4px) and custom outline colors.
+  - Realistic 3D soft drop shadow.
+- **Live Properties Inspector**: Floating right sidebar to fine-tune shape colors, opacity, stroke widths, and text properties.
+
+### 🖌️ Dual-Layer Vector Canvas & Freehand Painter
+- **Brush Presets**: Fine (2px), Medium (4px), Thick (8px), and Marker (16px).
+- **Highlighter Mode**: Semi-transparent yellow highlighting for emphasizing passages.
+- **Vector Stroke Eraser**: Click or drag over vector strokes to erase them cleanly without affecting PDF content.
+- **Clear Page**: One-click action to remove all drawn strokes on the active page.
+
+### ⌨️ Built-in Keyboard Shortcuts Modal (`?`)
+- **Notion-Styled Cheat Sheet**: Press `?` (or `Shift + /`) anywhere to open the shortcuts dialog.
+- Grouped into Navigation & View, Editing & Formatting, and Objects & Shapes with `<kbd>` key badges.
+
+### 💾 Lossless Vector Export Engine
+- **Client-Side PDF Generation**: Powered by `pdf-lib`, applying annotations, custom text, signatures, stamps, whiteouts, and vector SVG drawings.
+- **Multi-Page Geometry Mapping**: Accurately accounts for custom page ordering and per-page rotations during export.
+- **Zero Resolution Loss**: Preserves full vector sharpness and original document quality.
+
+### 🔒 100% Private & Local-First
+- All editing, signing, and exporting executes directly in the user's browser. Zero data tracking, zero third-party transmission.
 
 ---
 
 ## 📁 Repository Structure
 
-This repository is organized as a unified monorepo containing both the frontend client and the backend processing service:
-
 ```text
 pdf-editor/
 ├── frontend/                  # React 19 + TypeScript + Vite + Tailwind CSS
 │   ├── src/
-│   │   ├── components/        # Canvas, toolbars, properties inspector, dropzone
+│   │   ├── components/        # Canvas, toolbars, properties inspector, modals
+│   │   │   ├── canvas.tsx           # Fabric.js + PDF.js dual-layer viewport & tools
+│   │   │   ├── controls.tsx         # Header navigation, zoom, export, and toggles
+│   │   │   ├── setting.tsx          # Floating properties inspector for shapes & text
+│   │   │   ├── ThumbnailSidebar.tsx # Collapsible page thumbnail drawer
+│   │   │   ├── PageThumbnail.tsx    # Reusable high-DPI PDF page preview
+│   │   │   ├── PageManagerModal.tsx # Multi-page organizer (reorder, rotate, delete)
+│   │   │   ├── SignatureModal.tsx   # Digital signature pad, stamps & image upload
+│   │   │   ├── ShortcutsModal.tsx   # Keyboard shortcuts cheat-sheet modal
+│   │   │   └── mainPage.tsx         # Landing page and document dropzone
 │   │   ├── services/          # Backend API client (extract-blocks & edits)
+│   │   ├── types/             # TypeScript type definitions (ManagedPage, TextBlock)
 │   │   ├── utils/             # Lossless vector PDF export (pdf-lib & SVG stamping)
 │   │   └── index.css          # Notion design system tokens
 │   ├── public/                # Static assets & PDF.js web worker
-│   ├── screenshots/           # UI preview screenshots
 │   └── package.json           # Frontend dependencies & scripts
 ├── backend/                   # Node.js + Express + TypeScript service
 │   ├── src/
@@ -37,7 +96,6 @@ pdf-editor/
 │   │   ├── routes/            # RESTful API endpoints
 │   │   └── server.ts          # Server entry point (Port 5000)
 │   └── package.json           # Backend dependencies & scripts
-├── screenshots/               # Repository preview images
 ├── package.json               # Root workspace orchestrator
 ├── .gitignore                 # Unified ignore rules
 └── README.md                  # Project documentation
@@ -45,54 +103,40 @@ pdf-editor/
 
 ---
 
-## ✨ Features
-
-- **🎨 Notion-Inspired Minimalism**:
-  - Warm paper aesthetic (`#F7F6F3`), charcoal typography (`#37352F`), and crisp 1px borders.
-  - Floating left toolbar, contextual floating micro-formatting popover, and collapsible right properties inspector.
-
-- **✏️ Sub-Pixel In-Place Text Editing**:
-  - Click directly on any text block in the PDF to edit it inline with exact font family, size, weight, and style matching.
-  - Interactive micro-toolbar for formatting: **Bold** (`Ctrl+B`), **Italic** (`Ctrl+I`), original text reset, and deletion (whiteout mask).
-  - Drag-and-drop handles to move edited text blocks anywhere on the page with automatic background whiteout mask.
-
-- **🖌️ Dual-Layer Vector Canvas & Freehand Painter**:
-  - Dual-layer Fabric.js canvas synchronized with the high-DPI PDF page viewport.
-  - **Pen & Marker**: Presets for Fine (2px), Medium (4px), Thick (8px), and Marker (16px).
-  - **Highlighter Mode**: Semi-transparent yellow highlighting for emphasizing document passages.
-  - **Stroke Eraser**: Click or drag over vector strokes to remove them instantly without affecting underlying PDF text.
-  - **Clear Page**: One-click action to remove all vector strokes on the current page.
-
-- **📐 Geometric Shape Annotations**:
-  - Add Rectangles and Circles with custom fill and stroke colors.
-  - Adjust width, height, and stroke properties in real time using the right inspector panel.
-  - Keyboard deletion (`Delete` / `Backspace`).
-
-- **⏳ Page Navigation & Loading States**:
-  - Centered Notion-style loading spinner between page transitions.
-  - Segmented top pagination pill with integrated loading indicator and zoom reset controls.
-
-- **💾 Lossless Vector Export**:
-  - Client-side and server-side PDF generation embedding new text, whiteout overlays, and vector SVG drawings with zero quality degradation.
-
-- **🔒 100% Private & Local-First**:
-  - Direct browser execution with optional backend services for server-assisted document block extraction and batch editing.
-
----
-
 ## 🛠️ Tech Stack
 
 | Layer | Technologies |
 | :--- | :--- |
-| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS v4, Fabric.js v7, PDF.js (pdfjs-dist), pdf-lib, Lucide React |
-| **Backend** | Node.js, Express 5, TypeScript, tsx, Multer, pdf-lib, pdfjs-dist, Zod |
-| **Styling** | Tailwind CSS v4, Notion Design Tokens (`#F7F6F3`, `#37352F`, `#2383E2`) |
+| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS v4, Fabric.js v7, PDF.js (`pdfjs-dist`), `pdf-lib`, Lucide React |
+| **Backend** | Node.js, Express 5, TypeScript, `tsx`, Multer, `pdf-lib`, `pdfjs-dist`, Zod |
+| **Design System** | Notion Tokens (`#F7F6F3` Canvas, `#37352F` Ink, `#2383E2` Accent) |
+
+---
+
+## ⌨️ Keyboard Shortcuts Reference
+
+| Shortcut | Category | Action |
+| :--- | :--- | :--- |
+| `Space` + **Drag** | Navigation | Pan smoothly around the canvas |
+| `H` | Navigation | Toggle Hand / Pan Tool |
+| `V` | Navigation | Select / Pointer Tool |
+| `[` | Navigation | Toggle Page Thumbnails sidebar |
+| `←` / `→` | Navigation | Navigate to Previous / Next page |
+| `R` | Navigation | Rotate current page 90° clockwise |
+| `Ctrl` + `+` / `-` | Navigation | Zoom In / Zoom Out |
+| `Click 100%` | Navigation | Reset zoom to default |
+| `Click Text` | Editing | Edit original PDF text in-place |
+| `Ctrl` + `B` | Editing | Toggle **Bold** on selected text |
+| `Ctrl` + `I` | Editing | Toggle *Italic* on selected text |
+| `Enter` / `Esc` | Editing | Commit / exit inline text editing |
+| `Delete` / `Backspace` | Objects | Delete selected shape, sticky note, or text |
+| `?` or `Shift + /` | Help | Open Keyboard Shortcuts Guide |
 
 ---
 
 ## 🔌 Backend API Endpoints
 
-The backend runs on `http://localhost:5000` and provides the following RESTful services:
+The backend runs on `http://localhost:5000` and provides optional server-side processing:
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -110,8 +154,6 @@ The backend runs on `http://localhost:5000` and provides the following RESTful s
 
 ### 2. Installation
 
-Clone the repository and install all dependencies:
-
 ```bash
 # Clone the repository
 git clone https://github.com/UL2IMATE/pdf-editor.git
@@ -123,7 +165,7 @@ npm run install:all
 
 ### 3. Running in Development
 
-Run both the frontend and backend concurrently with a single command:
+Run both frontend and backend concurrently with one command:
 
 ```bash
 npm run dev
@@ -132,31 +174,18 @@ npm run dev
 Or run them individually in separate terminals:
 
 ```bash
-# Terminal 1 - Start the Frontend (http://localhost:5173)
+# Terminal 1 - Frontend (http://localhost:5173)
 npm run frontend:dev
 
-# Terminal 2 - Start the Backend (http://localhost:5000)
+# Terminal 2 - Backend (http://localhost:5000)
 npm run backend:dev
 ```
 
 ### 4. Production Build
 
-To compile both frontend and backend for production:
-
 ```bash
 npm run build
 ```
-
----
-
-## ⌨️ Keyboard Shortcuts
-
-| Shortcut | Action |
-| :--- | :--- |
-| `Ctrl + B` / `⌘ + B` | Toggle **Bold** on selected text edit |
-| `Ctrl + I` / `⌘ + I` | Toggle *Italic* on selected text edit |
-| `Enter` / `Esc` | Commit inline text edits |
-| `Delete` / `Backspace` | Delete selected shape, drawing stroke, or text box |
 
 ---
 
